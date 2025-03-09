@@ -199,22 +199,61 @@ async function createPdfBlob() {
     return pdf.output("blob");
 }
 
-/** 上傳 PDF 到 Google Drive，並存入今天日期資料夾 */
+/** 上傳 PDF 到 Google Drive
+ *  資料夾結構： 電子工單 ➜ 今日日期 ➜ 檔案
+ */
 async function uploadPDFToGoogleDrive() {
     const accessToken = await getGoogleAccessToken();
     const pdfBlob = await createPdfBlob();
     const todayFolderName = new Date().toISOString().slice(0, 10);
 
-    // 檢查資料夾是否存在
-    let res = await fetch(`https://www.googleapis.com/drive/v3/files?q=${encodeURIComponent(`mimeType='application/vnd.google-apps.folder' and name='${todayFolderName}' and trashed=false`)}&fields=files(id,name)`, {
+    // 1. 檢查或建立「電子工單」資料夾
+    const mainFolderId = await ensureFolderExists(accessToken, '電子工單');
+
+    // 2. 檢查或建立「今日日期」資料夾
+    const dateFolderId = await ensureFolderExists(accessToken, todayFolderName, mainFolderId);
+
+    // 3. 上傳 PDF 檔案到「今日日期」資料夾
+    const metadata = {
+        name: `${formData.value.plateNumber || "未填車牌"}.pdf`,
+        mimeType: "application/pdf",
+        parents: [dateFolderId]
+    };
+
+    const form = new FormData();
+    form.append("metadata", new Blob([JSON.stringify(metadata)], { type: "application/json" }));
+    form.append("file", pdfBlob);
+
+    const res = await fetch("https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart", {
+        method: "POST",
+        headers: { Authorization: `Bearer ${accessToken}` },
+        body: form,
+    });
+
+    const result = await res.json();
+
+    if (!result.id) {
+        throw new Error(JSON.stringify(result));
+    }
+}
+
+/** 檢查資料夾是否存在，不存在則建立並回傳 folderId */
+async function ensureFolderExists(accessToken, folderName, parentFolderId = null) {
+    const query = parentFolderId
+        ? `mimeType='application/vnd.google-apps.folder' and name='${folderName}' and trashed=false and '${parentFolderId}' in parents`
+        : `mimeType='application/vnd.google-apps.folder' and name='${folderName}' and trashed=false`;
+
+    // 搜尋資料夾
+    let res = await fetch(`https://www.googleapis.com/drive/v3/files?q=${encodeURIComponent(query)}&fields=files(id,name)`, {
         headers: { Authorization: `Bearer ${accessToken}` }
     });
     let result = await res.json();
-    let folderId;
 
     if (result.files?.length > 0) {
-        folderId = result.files[0].id;
+        // 資料夾已存在
+        return result.files[0].id;
     } else {
+        // 資料夾不存在，建立新資料夾
         res = await fetch("https://www.googleapis.com/drive/v3/files", {
             method: "POST",
             headers: {
@@ -222,34 +261,14 @@ async function uploadPDFToGoogleDrive() {
                 "Content-Type": "application/json"
             },
             body: JSON.stringify({
-                name: todayFolderName,
-                mimeType: "application/vnd.google-apps.folder"
+                name: folderName,
+                mimeType: "application/vnd.google-apps.folder",
+                parents: parentFolderId ? [parentFolderId] : undefined
             })
         });
+
         result = await res.json();
-        folderId = result.id;
-    }
-
-    const metadata = {
-        name: `${formData.value.plateNumber || "未填車牌"}.pdf`,
-        mimeType: "application/pdf",
-        parents: [folderId]
-    };
-
-    const form = new FormData();
-    form.append("metadata", new Blob([JSON.stringify(metadata)], { type: "application/json" }));
-    form.append("file", pdfBlob);
-
-    res = await fetch("https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart", {
-        method: "POST",
-        headers: { Authorization: `Bearer ${accessToken}` },
-        body: form,
-    });
-
-    result = await res.json();
-
-    if (!result.id) {
-        throw new Error(JSON.stringify(result));
+        return result.id;
     }
 }
 /** 重新填寫 */
