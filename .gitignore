@@ -1,0 +1,49 @@
+# Node 模組和建置後的資料夾
+node_modules
+dist
+dist-ssr
+*.local
+
+# 敏感環境變數
+.env
+.env.*
+
+# Logs & Debug Files
+logs
+*.log
+npm-debug.log*
+lerna-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+
+# 編輯器產生的檔案
+.vscode/*
+!.vscode/extensions.json
+.idea
+.DS_Store
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+*.sw?
+
+# macOS system files
+.DS_Store
+
+# IDE specific files
+.vscode/
+.idea/
+
+# 作業系統特有的檔案
+Thumbs.db
+.DS_Store
+
+# 測試與覆蓋率報告
+coverage
+coverage/
+
+# npm/yarn lock files (optional)
+package-lock.json
+yarn.lock
+pnpm-lock.yaml
